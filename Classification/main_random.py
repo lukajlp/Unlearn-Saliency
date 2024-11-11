@@ -12,6 +12,7 @@ import unlearn
 import utils
 from trainer import validate
 
+
 def main():
     args = arg_parser.parse_args()
 
@@ -125,7 +126,6 @@ def main():
     if args.resume and checkpoint is not None:
         model, evaluation_result = checkpoint
     else:
-
         checkpoint = torch.load(args.model_path, map_location=device)
         if "state_dict" in checkpoint.keys():
             checkpoint = checkpoint["state_dict"]
@@ -153,6 +153,15 @@ def main():
 
         evaluation_result["accuracy"] = accuracy
         unlearn.save_unlearn_checkpoint(model, evaluation_result, args)
+
+    UA = 100 - (evaluation_result["accuracy"]["forget"] / 100)
+    print(f"UA (Unlearning Accuracy): {UA:.2f}")
+
+    RA = evaluation_result["accuracy"]["retain"]
+    print(f"RA (Remaining Accuracy): {RA:.2f}")
+
+    TA = evaluation_result["accuracy"]["test"]
+    print(f"TA (Testing Accuracy): {TA:.2f}")
 
     for deprecated in ["MIA", "SVC_MIA", "SVC_MIA_forget"]:
         if deprecated in evaluation_result:

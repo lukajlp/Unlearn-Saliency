@@ -102,10 +102,18 @@ def SVC_MIA(shadow_train, target_train, target_test, shadow_test, model):
         torch.argmax(target_test_prob, axis=1) == target_test_labels
     ).int()
 
-    shadow_train_conf = torch.gather(shadow_train_prob, 1, shadow_train_labels[:, None])
-    shadow_test_conf = torch.gather(shadow_test_prob, 1, shadow_test_labels[:, None])
-    target_train_conf = torch.gather(target_train_prob, 1, target_train_labels[:, None])
-    target_test_conf = torch.gather(target_test_prob, 1, target_test_labels[:, None])
+    shadow_train_conf = torch.gather(
+        shadow_train_prob, 1, shadow_train_labels[:, None].long()
+    )
+    shadow_test_conf = torch.gather(
+        shadow_test_prob, 1, shadow_test_labels[:, None].long()
+    )
+    target_train_conf = torch.gather(
+        target_train_prob, 1, target_train_labels[:, None].long()
+    )
+    target_test_conf = torch.gather(
+        target_test_prob, 1, target_test_labels[:, None].long()
+    )
 
     shadow_train_entr = entropy(shadow_train_prob)
     shadow_test_entr = entropy(shadow_test_prob)
@@ -146,5 +154,5 @@ def SVC_MIA(shadow_train, target_train, target_test, shadow_test, model):
         "m_entropy": acc_m_entr,
         "prob": acc_prob,
     }
-    
+
     return m
