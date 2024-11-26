@@ -63,7 +63,9 @@ def parse_args():
         default=None,
         type=str,
     )
-    parser.add_argument("--model_path", type=str, default=None, help="the path of original model")
+    parser.add_argument(
+        "--model_path", type=str, default=None, help="the path of original model"
+    )
 
     ##################################### Training setting #################################################
     parser.add_argument("--batch_size", type=int, default=256, help="batch size")
@@ -140,6 +142,17 @@ def parse_args():
         help="Specific index data to forget",
     )
     parser.add_argument("--alpha", default=0.2, type=float, help="unlearn noise")
-    parser.add_argument("--mask_path", default=None, type=str, help="the path of saliency map")
+    parser.add_argument(
+        "--mask_path", default=None, type=str, help="the path of saliency map"
+    )
+
+    ### Noise Settings
+
+    parser.add_argument(
+        "--noise_rate",
+        default=0.0,
+        type=float,
+        help="noise rate",
+    )
 
     return parser.parse_args()

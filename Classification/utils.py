@@ -1,7 +1,6 @@
 """
-    setup model and datasets
+setup model and datasets
 """
-
 
 import copy
 import os
@@ -116,15 +115,28 @@ def setup_model_dataset(args):
             mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616]
         )
         train_full_loader, val_loader, _ = cifar10_dataloaders(
-            batch_size=args.batch_size, data_dir=args.data, num_workers=args.workers
+            batch_size=args.batch_size,
+            data_dir=args.data,
+            num_workers=args.workers,
+            noise_rate=args.noise_rate,
         )
+
+        if args.indexes_to_replace is not None:
+            noise_file = f"cifar10_{args.noise_rate}_sym.json"
+            noise = json.load(open(noise_file, "r"))
+            indexes_to_replace = noise["closed_noise"]
+        else:
+            indexes_to_replace = args.indexes_to_replace
+        # import pdb; pdb.set_trace()
         marked_loader, _, test_loader = cifar10_dataloaders(
             batch_size=args.batch_size,
             data_dir=args.data,
             num_workers=args.workers,
-            class_to_replace=args.class_to_replace,
+            # removi a linha de baixo para não substituir aleatoriamente
+            # class_to_replace=args.class_to_replace,
             num_indexes_to_replace=args.num_indexes_to_replace,
-            indexes_to_replace=args.indexes_to_replace,
+            # indexes_to_replace=args.indexes_to_replace,
+            indexes_to_replace=indexes_to_replace,
             seed=args.seed,
             only_mark=True,
             shuffle=True,
