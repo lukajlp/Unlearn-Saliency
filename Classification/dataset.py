@@ -192,6 +192,9 @@ def cifar100_dataloaders(
     only_mark: bool = False,
     shuffle=True,
     no_aug=False,
+    noise_rate=0.0,
+    noise_mode="sym",
+    noise_file=None,
 ):
     if no_aug:
         train_transform = transforms.Compose(
@@ -235,11 +238,62 @@ def cifar100_dataloaders(
         )
     valid_idx = np.hstack(valid_idx)
     train_set_copy = copy.deepcopy(train_set)
+    train_clean_set = copy.deepcopy(train_set)
 
     valid_set.data = train_set_copy.data[valid_idx]
     valid_set.targets = train_set_copy.targets[valid_idx]
 
     train_idx = list(set(range(len(train_set))) - set(valid_idx))
+
+    # noisify trainset
+
+    noise_file = f"cifar100_{noise_rate}_sym.json"
+    if os.path.exists(noise_file):
+        noise = json.load(open(noise_file, "r"))
+        noise_labels = noise["noise_labels"]
+
+        train_set_copy.targets = np.array(noise_labels)
+        train_set.targets = train_set_copy.targets
+
+    else:
+        noise_labels = []  # all labels (some noisy, some clean)
+        idx = train_idx
+        num_total_noise = int(noise_rate * len(train_idx))  # total amount of noise
+
+        print(
+            "Statistics of synthetic noisy CIFAR dataset: ",
+            "num of clean samples: ",
+            len(train_idx) - num_total_noise,
+            " num of closed-set noise: ",
+            num_total_noise,
+        )
+
+        closed_noise = idx[0:num_total_noise]  # closed set noise indices
+
+        for i in range(45500):  # pra incluir o conjunto de validação.
+            # Mas o conjunto de validacao nao vai ser alterado pq o idx é baseado no train_idx
+            if i in closed_noise:
+                noiselabel = random.randint(0, 99)
+                noise_labels.append(noiselabel)
+                train_set_copy.targets[i] = noiselabel
+
+            else:
+                noise_labels.append(train_set_copy.targets[i])
+
+        train_set.targets = train_set_copy.targets
+
+        noise_labels = [int(x) for x in noise_labels]
+        clean_idx = list(set(range(len(train_idx))) - set(closed_noise))
+        noise = {
+            "noise_labels": noise_labels,
+            "closed_noise": closed_noise,
+            "clean_idx": clean_idx,
+        }
+
+        print("save noise to %s ..." % noise_file)
+        json.dump(noise, open(noise_file, "w"))
+
+    # end noisify trainset
 
     train_set.data = train_set_copy.data[train_idx]
     train_set.targets = train_set_copy.targets[train_idx]
