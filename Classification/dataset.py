@@ -238,7 +238,6 @@ def cifar100_dataloaders(
         )
     valid_idx = np.hstack(valid_idx)
     train_set_copy = copy.deepcopy(train_set)
-    train_clean_set = copy.deepcopy(train_set)
 
     valid_set.data = train_set_copy.data[valid_idx]
     valid_set.targets = train_set_copy.targets[valid_idx]
@@ -279,8 +278,6 @@ def cifar100_dataloaders(
 
             else:
                 noise_labels.append(train_set_copy.targets[i])
-
-        train_set.targets = train_set_copy.targets
 
         noise_labels = [int(x) for x in noise_labels]
         clean_idx = list(set(range(len(train_idx))) - set(closed_noise))

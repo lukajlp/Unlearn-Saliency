@@ -33,7 +33,7 @@ def save_gradient_ratio(data_loaders, model, criterion, args):
 
         # compute output
         output_clean = model(image)
-        loss = - criterion(output_clean, target)
+        loss = -criterion(output_clean, target)
 
         optimizer.zero_grad()
         loss.backward()
@@ -54,7 +54,7 @@ def save_gradient_ratio(data_loaders, model, criterion, args):
         hard_dict = {}
 
         # Concatenate all tensors into a single tensor
-        all_elements = - torch.cat([tensor.flatten() for tensor in gradients.values()])
+        all_elements = -torch.cat([tensor.flatten() for tensor in gradients.values()])
 
         # Calculate the threshold index for the top 10% elements
         threshold_index = int(len(all_elements) * i)
