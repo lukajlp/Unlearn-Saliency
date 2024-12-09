@@ -269,7 +269,7 @@ def cifar100_dataloaders(
 
         closed_noise = idx[0:num_total_noise]  # closed set noise indices
 
-        for i in range(45500):  # pra incluir o conjunto de validação.
+        for i in range(50000):  # pra incluir o conjunto de validação.
             # Mas o conjunto de validacao nao vai ser alterado pq o idx é baseado no train_idx
             if i in closed_noise:
                 noiselabel = random.randint(0, 99)
