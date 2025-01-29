@@ -258,6 +258,7 @@ def cifar100_dataloaders(
         noise_labels = []  # all labels (some noisy, some clean)
         idx = train_idx
         num_total_noise = int(noise_rate * len(train_idx))  # total amount of noise
+        import pdb; pdb.set_trace()
 
         print(
             "Statistics of synthetic noisy CIFAR dataset: ",
