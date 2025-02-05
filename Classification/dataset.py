@@ -231,11 +231,11 @@ def cifar100_dataloaders(
     rng = np.random.RandomState(seed)
     valid_set = copy.deepcopy(train_set)
     valid_idx = []
-    for i in range(max(train_set.targets) + 1):
-        class_idx = np.where(train_set.targets == i)[0]
-        valid_idx.append(
-            rng.choice(class_idx, int(0.1 * len(class_idx)), replace=False)
-        )
+    # for i in range(max(train_set.targets) + 1):
+    #     class_idx = np.where(train_set.targets == i)[0]
+    #     valid_idx.append(
+    #         rng.choice(class_idx, int(0.1 * len(class_idx)), replace=False)
+    #     )
     valid_idx = np.hstack(valid_idx)
     train_set_copy = copy.deepcopy(train_set)
 
@@ -331,13 +331,13 @@ def cifar100_dataloaders(
         worker_init_fn=_init_fn if seed is not None else None,
         **loader_args,
     )
-    val_loader = DataLoader(
-        valid_set,
-        batch_size=batch_size,
-        shuffle=False,
-        worker_init_fn=_init_fn if seed is not None else None,
-        **loader_args,
-    )
+    # val_loader = DataLoader(
+    #     valid_set,
+    #     batch_size=batch_size,
+    #     shuffle=False,
+    #     worker_init_fn=_init_fn if seed is not None else None,
+    #     **loader_args,
+    # )
     test_loader = DataLoader(
         test_set,
         batch_size=batch_size,
@@ -346,7 +346,7 @@ def cifar100_dataloaders(
         **loader_args,
     )
 
-    return train_loader, val_loader, test_loader
+    return train_loader, test_loader, test_loader
 
 
 def cifar100_dataloaders_no_val(
@@ -634,11 +634,11 @@ def cifar10_dataloaders(
     rng = np.random.RandomState(seed)
     valid_set = copy.deepcopy(train_set)
     valid_idx = []
-    for i in range(max(train_set.targets) + 1):
-        class_idx = np.where(train_set.targets == i)[0]
-        valid_idx.append(
-            rng.choice(class_idx, int(0.1 * len(class_idx)), replace=False)
-        )
+    # for i in range(max(train_set.targets) + 1):
+    #     class_idx = np.where(train_set.targets == i)[0]
+    #     valid_idx.append(
+    #         rng.choice(class_idx, int(0.1 * len(class_idx)), replace=False)
+    #     )
     valid_idx = np.hstack(valid_idx)
     train_set_copy = copy.deepcopy(train_set)
     train_clean_set = copy.deepcopy(train_set)
@@ -773,13 +773,13 @@ def cifar10_dataloaders(
         worker_init_fn=_init_fn if seed is not None else None,
         **loader_args,
     )
-    val_loader = DataLoader(
-        valid_set,
-        batch_size=batch_size,
-        shuffle=False,
-        worker_init_fn=_init_fn if seed is not None else None,
-        **loader_args,
-    )
+    # val_loader = DataLoader(
+    #     valid_set,
+    #     batch_size=batch_size,
+    #     shuffle=False,
+    #     worker_init_fn=_init_fn if seed is not None else None,
+    #     **loader_args,
+    # )
     test_loader = DataLoader(
         test_set,
         batch_size=batch_size,
@@ -788,7 +788,7 @@ def cifar10_dataloaders(
         **loader_args,
     )
 
-    return train_loader, val_loader, test_loader
+    return train_loader, test_loader, test_loader
 
 
 def replace_indexes(
