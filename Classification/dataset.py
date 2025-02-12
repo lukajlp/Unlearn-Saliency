@@ -228,21 +228,22 @@ def cifar100_dataloaders(
     train_set.targets = np.array(train_set.targets)
     test_set.targets = np.array(test_set.targets)
 
-    rng = np.random.RandomState(seed)
-    valid_set = copy.deepcopy(train_set)
-    valid_idx = []
+    # rng = np.random.RandomState(seed)
+    # valid_set = copy.deepcopy(train_set)
+    # valid_idx = []
     # for i in range(max(train_set.targets) + 1):
     #     class_idx = np.where(train_set.targets == i)[0]
     #     valid_idx.append(
     #         rng.choice(class_idx, int(0.1 * len(class_idx)), replace=False)
     #     )
-    valid_idx = np.hstack(valid_idx)
+    # valid_idx = np.hstack(valid_idx)
     train_set_copy = copy.deepcopy(train_set)
 
-    valid_set.data = train_set_copy.data[valid_idx]
-    valid_set.targets = train_set_copy.targets[valid_idx]
+    # valid_set.data = train_set_copy.data[valid_idx]
+    # valid_set.targets = train_set_copy.targets[valid_idx]
 
-    train_idx = list(set(range(len(train_set))) - set(valid_idx))
+    # train_idx = list(set(range(len(train_set))) - set(valid_idx))
+    train_idx = list(range(len(train_set)))
 
     # noisify trainset
 
@@ -631,22 +632,23 @@ def cifar10_dataloaders(
     train_set.targets = np.array(train_set.targets)
     test_set.targets = np.array(test_set.targets)
 
-    rng = np.random.RandomState(seed)
-    valid_set = copy.deepcopy(train_set)
-    valid_idx = []
+    # rng = np.random.RandomState(seed)
+    # valid_set = copy.deepcopy(train_set)
+    # valid_idx = []
     # for i in range(max(train_set.targets) + 1):
     #     class_idx = np.where(train_set.targets == i)[0]
     #     valid_idx.append(
     #         rng.choice(class_idx, int(0.1 * len(class_idx)), replace=False)
     #     )
-    valid_idx = np.hstack(valid_idx)
+    # valid_idx = np.hstack(valid_idx)
     train_set_copy = copy.deepcopy(train_set)
-    train_clean_set = copy.deepcopy(train_set)
+    # train_clean_set = copy.deepcopy(train_set)
 
-    valid_set.data = train_set_copy.data[valid_idx]
-    valid_set.targets = train_set_copy.targets[valid_idx]
+    # valid_set.data = train_set_copy.data[valid_idx]
+    # valid_set.targets = train_set_copy.targets[valid_idx]
 
-    train_idx = list(set(range(len(train_set))) - set(valid_idx))
+    # train_idx = list(set(range(len(train_set))) - set(valid_idx))
+    train_idx = list(range(len(train_set)))
 
     # import pdb; pdb.set_trace()
     # noise_labels = None
