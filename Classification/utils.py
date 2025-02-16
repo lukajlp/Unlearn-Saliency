@@ -119,6 +119,7 @@ def setup_model_dataset(args):
             data_dir=args.data,
             num_workers=args.workers,
             noise_rate=args.noise_rate,
+            noise_mode=args.noise_mode,
         )
 
         if args.indexes_to_replace is not None:

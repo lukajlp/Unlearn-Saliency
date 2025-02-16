@@ -155,4 +155,11 @@ def parse_args():
         help="noise rate",
     )
 
+    parser.add_argument(
+        "--noise_mode",
+        default="sym",
+        type=str,
+        help="noise mode",
+    )
+
     return parser.parse_args()

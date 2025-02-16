@@ -692,17 +692,19 @@ def cifar10_dataloaders(
         # self.closed_noise = idx[0:num_total_noise]  # closed set noise indices
         closed_noise = idx[0:num_total_noise]  # closed set noise indices
         # populate noise_labels
+
+        transition = {0: 0, 2: 0, 4: 7, 7: 7, 1: 1, 9: 1, 3: 5, 5: 3, 6: 6, 8: 8}  # class transition for asymmetric noise
+
         for i in range(50000):  # pra incluir o conjunto de validação.
             # Mas o conjunto de validacao nao vai ser alterado pq o idx é baseado no train_idx
             # for i in idx:
             if i in closed_noise:
-                # if noise_mode == 'sym':
-                # if dataset == 'cifar10':
-                noiselabel = random.randint(0, 9)
-                #     elif dataset == 'cifar100':
-                #         noiselabel = random.randint(0, 99)
-                # elif noise_mode == 'asym':
-                # noiselabel = self.transition[cifar_label[i]]
+
+                if noise_mode == 'sym':
+                    noiselabel = random.randint(0, 9)
+                elif noise_mode == 'asym':
+                    noiselabel = transition[train_set_copy.targets[i]]
+
                 noise_labels.append(noiselabel)
                 train_set_copy.targets[i] = noiselabel
 
