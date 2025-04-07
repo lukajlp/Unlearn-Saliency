@@ -341,6 +341,49 @@ def setup_model_dataset(args):
         model.normalize = normalization
         return model, train_full_loader, val_loader, test_loader, marked_loader
 
+    elif args.dataset == "cifar100_idn":
+        classes = 100
+        normalization = NormalizeByChannelMeanStd(
+            mean=[0.5071, 0.4866, 0.4409], std=[0.2673, 0.2564, 0.2762]
+        )
+        train_full_loader, val_loader, _ = cifar100_idn_dataloaders(
+            batch_size=args.batch_size,
+            data_dir=args.data,
+            num_workers=args.workers,
+            noise_rate=args.noise_rate,
+        )
+
+        if args.indexes_to_replace is not None:
+            noise_file = f"cifar100_idn_{args.noise_rate}_sym.json"
+            noise = json.load(open(noise_file, "r"))
+            indexes_to_replace = noise["closed_noise"]
+        else:
+            indexes_to_replace = args.indexes_to_replace
+
+        marked_loader, _, test_loader = cifar10_idn_dataloaders(
+            batch_size=args.batch_size,
+            data_dir=args.data,
+            num_workers=args.workers,
+            seed=args.seed,
+            only_mark=True,
+            shuffle=True,
+            no_aug=args.no_aug,
+        )
+
+        if args.train_seed is None:
+            args.train_seed = args.seed
+        setup_seed(args.train_seed)
+
+        if args.imagenet_arch:
+            model = model_dict[args.arch](num_classes=classes, imagenet=True)
+        else:
+            model = model_dict[args.arch](num_classes=classes)
+
+        setup_seed(args.train_seed)
+
+        model.normalize = normalization
+        return model, train_full_loader, val_loader, test_loader, marked_loader
+
     else:
         raise ValueError("Dataset not supprot yet !")
     # import pdb;pdb.set_trace()

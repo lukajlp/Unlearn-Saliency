@@ -895,6 +895,105 @@ def cifar10_idn_dataloaders(
 
     return train_loader, test_loader, test_loader
 
+def cifar100_idn_dataloaders(
+    batch_size=128,
+    data_dir="datasets/cifar100",
+    seed: int = 1,
+    no_aug=False,
+    noise_rate=0.0,
+    noise_file=None,
+):
+    if no_aug:
+        train_transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+            ]
+        )
+    else:
+        train_transform = transforms.Compose(
+            [
+                transforms.RandomCrop(32, padding=4),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ]
+        )
+
+    test_transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+        ]
+    )
+
+    print(
+        "Dataset information: CIFAR-100\t 45000 images for training \t 500 images for validation\t"
+    )
+    print("10000 images for testing\t no normalize applied in data_transform")
+    print("Data augmentation = randomcrop(32,4) + randomhorizontalflip")
+
+    train_set = CIFAR100(data_dir, train=True, transform=train_transform, download=True)
+    test_set = CIFAR100(data_dir, train=False, transform=test_transform, download=True)
+    train_set.targets = np.array(train_set.targets)
+
+    noise_file = f"cifar100_idn_{noise_rate}_sym.json"
+    if os.path.exists(noise_file):
+        noise = json.load(open(noise_file, "r"))
+        noise_labels = noise["noise_labels"]
+
+    else:
+        # Gerar features
+        data_tensor = torch.stack([train_transform(img) for img, _ in train_set])
+        data_tensor = data_tensor.view(-1, 32 * 32 * 3)
+
+        noise_labels = get_instance_noisy_label(
+            n=noise_rate,
+            dataset=list(zip(data_tensor, train_set.targets)),
+            labels=np.array(train_set.targets),
+            num_classes=100,
+            feature_size=32 * 32 * 3,
+            norm_std=0.1,
+            seed=seed,
+        )
+
+        original_labels = train_set.targets
+        closed_noise = np.where(noise_labels != original_labels)[0].tolist()
+        clean_idx = np.where(noise_labels == original_labels)[0].tolist()
+
+        noise = {
+            "noise_labels": noise_labels.tolist(),
+            "closed_noise": closed_noise,
+            "clean_idx": clean_idx,
+        }
+
+        json.dump(noise, open(noise_file, "w"))
+        print(f"Noise file saved to {noise_file}")
+
+    # end noisify trainset
+
+    # Aplicar rótulos ruidosos
+    train_set.targets = np.array(noise_labels)
+
+    loader_args = {"num_workers": 0, "pin_memory": False}
+
+    def _init_fn(worker_id):
+        np.random.seed(int(seed))
+
+    train_loader = DataLoader(
+        train_set,
+        batch_size=batch_size,
+        shuffle=True,
+        worker_init_fn=_init_fn if seed is not None else None,
+        **loader_args,
+    )
+    test_loader = DataLoader(
+        test_set,
+        batch_size=batch_size,
+        shuffle=False,
+        worker_init_fn=_init_fn if seed is not None else None,
+        **loader_args,
+    )
+
+    return train_loader, test_loader, test_loader
+
 def replace_indexes(
     dataset: torch.utils.data.Dataset, indexes, seed=0, only_mark: bool = False
 ):
