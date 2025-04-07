@@ -14,7 +14,9 @@ from shutil import move
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from PIL import Image
+from scipy import stats
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, CIFAR100, SVHN, ImageFolder
@@ -794,6 +796,104 @@ def cifar10_dataloaders(
 
     return train_loader, test_loader, test_loader
 
+def cifar10_idn_dataloaders(
+    batch_size=128,
+    data_dir="datasets/cifar10",
+    seed: int = 1,
+    no_aug=False,
+    noise_rate=0.0,
+    noise_file=None,
+):
+    if no_aug:
+        train_transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+            ]
+        )
+    else:
+        train_transform = transforms.Compose(
+            [
+                transforms.RandomCrop(32, padding=4),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ]
+        )
+
+    test_transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+        ]
+    )
+
+    print(
+        "Dataset information: CIFAR-10\t 45000 images for training \t 5000 images for validation\t"
+    )
+    print("10000 images for testing\t no normalize applied in data_transform")
+    print("Data augmentation = randomcrop(32,4) + randomhorizontalflip")
+
+    train_set = CIFAR10(data_dir, train=True, transform=train_transform, download=True)
+    test_set = CIFAR10(data_dir, train=False, transform=test_transform, download=True)
+    train_set.targets = np.array(train_set.targets)
+
+    noise_file = f"cifar10_idn_{noise_rate}_sym.json"
+    if os.path.exists(noise_file):
+        noise = json.load(open(noise_file, "r"))
+        noise_labels = noise["noise_labels"]
+
+    else:
+        # Gerar features
+        data_tensor = torch.stack([train_transform(img) for img, _ in train_set])
+        data_tensor = data_tensor.view(-1, 32 * 32 * 3)
+
+        noise_labels = get_instance_noisy_label(
+            n=noise_rate,
+            dataset=list(zip(data_tensor, train_set.targets)),
+            labels=np.array(train_set.targets),
+            num_classes=10,
+            feature_size=32 * 32 * 3,
+            norm_std=0.1,
+            seed=seed,
+        )
+
+        original_labels = train_set.targets
+        closed_noise = np.where(noise_labels != original_labels)[0].tolist()
+        clean_idx = np.where(noise_labels == original_labels)[0].tolist()
+
+        noise = {
+            "noise_labels": noise_labels.tolist(),
+            "closed_noise": closed_noise,
+            "clean_idx": clean_idx,
+        }
+
+        json.dump(noise, open(noise_file, "w"))
+        print(f"Noise file saved to {noise_file}")
+
+    # end noisify trainset
+
+    # Aplicar rótulos ruidosos
+    train_set.targets = np.array(noise_labels)
+
+    loader_args = {"num_workers": 0, "pin_memory": False}
+
+    def _init_fn(worker_id):
+        np.random.seed(int(seed))
+
+    train_loader = DataLoader(
+        train_set,
+        batch_size=batch_size,
+        shuffle=True,
+        worker_init_fn=_init_fn if seed is not None else None,
+        **loader_args,
+    )
+    test_loader = DataLoader(
+        test_set,
+        batch_size=batch_size,
+        shuffle=False,
+        worker_init_fn=_init_fn if seed is not None else None,
+        **loader_args,
+    )
+
+    return train_loader, test_loader, test_loader
 
 def replace_indexes(
     dataset: torch.utils.data.Dataset, indexes, seed=0, only_mark: bool = False
@@ -854,6 +954,66 @@ def replace_class(
         print(f"Replacing indexes {indexes}")
     replace_indexes(dataset, indexes, seed, only_mark)
 
+def get_instance_noisy_label(n, dataset, labels, num_classes, feature_size, norm_std, seed):
+    # n: Taxa de ruído global (não é fixa por amostra!)
+    # dataset: Pares (features, label_verdadeira)
+    # labels: Vetor de labels originais
+    # num_classes: Número de classes (10 para CIFAR-10)
+    # feature_size: Dimensão das features (32x32x3=3072)
+    # norm_std: Desvio padrão da distribuição truncada
+    # seed: Semente para reprodutibilidade
+
+    # ==============================================
+    # 1. Inicialização e Configuração
+    # ==============================================
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    P = []  # Armazenará as distribuições de probabilidade
+
+    # Distribuição truncada para flip rates variáveis
+    flip_distribution = stats.truncnorm(
+        (0 - n)/norm_std, 
+        (1 - n)/norm_std, 
+        loc=n, 
+        scale=norm_std
+    )
+    flip_rate = flip_distribution.rvs(len(labels))  # Taxa de erro por amostra
+
+    # ==============================================
+    # 2. Matriz de Ruído (Coração do IDN)
+    # ==============================================
+    # W: Matriz 3D que mapeia features -> ruído específico por classe
+    # Dimensões: (num_classes, feature_size, num_classes)
+    W = torch.randn(num_classes, feature_size, num_classes, device=device)
+
+    # ==============================================
+    # 3. Geração de Rótulos Ruidosos
+    # ==============================================
+    for i, (x, y) in enumerate(dataset):
+        x = x.to(device).float().view(1, -1)  # Feature vector (1x3072)
+        
+        # Calcula "afinidade" para classes incorretas
+        A = x @ W[y]  # Multiplicação matricial
+        
+        # Remove a classe verdadeira
+        A[0, y] = -float('inf')
+        
+        # Calcula probabilidades escaladas pelo flip rate
+        A = flip_rate[i] * F.softmax(A, dim=1)
+        
+        # Mantém a classe correta com probabilidade (1 - flip_rate[i])
+        A[0, y] += 1 - flip_rate[i]
+        
+        P.append(A.cpu().numpy().squeeze())
+
+    # ==============================================
+    # 4. Amostragem dos Novos Rótulos
+    # ==============================================
+    new_label = [np.random.choice(num_classes, p=p) for p in P]
+    
+    return np.array(new_label)
 
 if __name__ == "__main__":
     train_loader, val_loader, test_loader = cifar10_dataloaders()
