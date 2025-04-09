@@ -422,6 +422,39 @@ def setup_model_dataset(args):
         model.normalize = normalization
         
         return model, train_full_loader, val_loader, test_loader, marked_loader
+    
+    elif args.dataset == "animal10n":
+        classes = 10
+
+        normalization = NormalizeByChannelMeanStd(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
+        
+        train_loader, val_loader, test_loader = animal10n_dataloaders(
+            batch_size=args.batch_size,
+            num_workers=args.workers,
+            seed=args.seed,
+            no_aug=args.no_aug,
+        )
+        
+        # Configura a semente para reprodutibilidade no treinamento
+        if args.train_seed is None:
+            args.train_seed = args.seed
+        setup_seed(args.train_seed)
+        
+        # Instancia o modelo. Se desejar usar arquitetura pré-treinada em ImageNet, passe o parâmetro correspondente.
+        if args.imagenet_arch:
+            model = model_dict[args.arch](num_classes=classes, imagenet=True)
+        else:
+            model = model_dict[args.arch](num_classes=classes)
+        
+        setup_seed(args.train_seed)
+        model.normalize = normalization
+        
+        # Retorne o modelo e os loaders (o último, por exemplo, pode ser usado para marcação ou outros fins)
+        return model, train_loader, val_loader, test_loader, train_loader
+
 
     else:
         raise ValueError("Dataset not supprot yet !")

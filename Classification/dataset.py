@@ -1146,6 +1146,77 @@ def cifar10_openset_dataloaders(
 
     return train_loader, test_loader, test_loader
 
+def animal10n_dataloaders(
+    batch_size=128,
+    data_dir="/mnt/hd_pesquisa/pesquisa/datasets/animal10n",
+    num_workers=2,
+    seed=1,
+    no_aug=False,
+):
+    class InlineAnimal10NDataset(Dataset):
+        def __init__(self, root, transform=None, mode='train'):
+            self.transform = transform
+            dir_path = os.path.join(os.path.abspath(root), mode)
+            self.files = os.listdir(dir_path)
+            self.targets = [int(f.split('_')[0]) for f in self.files]
+            self.paths = [os.path.join(dir_path, f) for f in self.files]
+
+        def __getitem__(self, index):
+            path = self.paths[index]
+            target = self.targets[index]
+            image = Image.open(path).convert('RGB')
+            if self.transform:
+                image = self.transform(image)
+            return image, target, index
+
+        def __len__(self):
+            return len(self.targets)
+
+    if no_aug:
+        train_transform = transforms.Compose([
+            transforms.ToTensor(),
+        ])
+    else:
+        train_transform = transforms.Compose([
+            transforms.RandomResizedCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+        ])
+
+    test_transform = transforms.Compose([
+        transforms.ToTensor(),
+    ])
+
+    print("Carregando Animal10N:")
+    print(" - Treinamento: pasta 'training'")
+    print(" - Teste: pasta 'testing'")
+
+    train_set = InlineAnimal10NDataset(root=data_dir, transform=train_transform, mode='training')
+    test_set = InlineAnimal10NDataset(root=data_dir, transform=test_transform, mode='testing')
+
+    loader_args = {"num_workers": num_workers, "pin_memory": False}
+
+    def _init_fn(worker_id):
+        np.random.seed(seed + worker_id)
+        random.seed(seed + worker_id)
+
+    train_loader = DataLoader(
+        train_set,
+        batch_size=batch_size,
+        shuffle=True,
+        worker_init_fn=_init_fn,
+        **loader_args,
+    )
+
+    test_loader = DataLoader(
+        test_set,
+        batch_size=batch_size,
+        shuffle=False,
+        worker_init_fn=_init_fn,
+        **loader_args,
+    )
+
+    return train_loader, test_loader, test_loader
 
 def replace_indexes(
     dataset: torch.utils.data.Dataset, indexes, seed=0, only_mark: bool = False
