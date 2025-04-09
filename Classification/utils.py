@@ -384,6 +384,45 @@ def setup_model_dataset(args):
         model.normalize = normalization
         return model, train_full_loader, val_loader, test_loader, marked_loader
 
+    elif args.dataset == "cifar10_open":
+        classes = 10
+        normalization = NormalizeByChannelMeanStd(
+            mean=[0.4914, 0.4822, 0.4465],
+            std=[0.2470, 0.2435, 0.2616]
+        )
+    
+        train_full_loader, val_loader, _ = cifar10_openset_dataloaders(
+            batch_size=args.batch_size,
+            data_dir=args.data,
+            num_workers=args.workers,
+            noise_rate=args.noise_rate,
+            open_ratio=args.open_ratio,
+        )
+
+        marked_loader, _, test_loader = cifar10_openset_dataloaders(
+            batch_size=args.batch_size,
+            data_dir=args.data,
+            num_workers=args.workers,
+            seed=args.seed,
+            no_aug=args.no_aug,
+            noise_rate=args.noise_rate,
+            open_ratio=args.open_ratio,
+        )
+        
+        if args.train_seed is None:
+            args.train_seed = args.seed
+        setup_seed(args.train_seed)
+        
+        if args.imagenet_arch:
+            model = model_dict[args.arch](num_classes=classes, imagenet=True)
+        else:
+            model = model_dict[args.arch](num_classes=classes)
+            
+        setup_seed(args.train_seed)
+        model.normalize = normalization
+        
+        return model, train_full_loader, val_loader, test_loader, marked_loader
+
     else:
         raise ValueError("Dataset not supprot yet !")
     # import pdb;pdb.set_trace()
