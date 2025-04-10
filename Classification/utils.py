@@ -345,7 +345,6 @@ def setup_model_dataset(args):
         train_full_loader, val_loader, _ = cifar100_idn_dataloaders(
             batch_size=args.batch_size,
             data_dir=args.data,
-            num_workers=args.workers,
             noise_rate=args.noise_rate,
         )
 
@@ -359,10 +358,7 @@ def setup_model_dataset(args):
         marked_loader, _, test_loader = cifar10_idn_dataloaders(
             batch_size=args.batch_size,
             data_dir=args.data,
-            num_workers=args.workers,
             seed=args.seed,
-            only_mark=True,
-            shuffle=True,
             no_aug=args.no_aug,
         )
 
