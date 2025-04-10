@@ -320,8 +320,6 @@ def setup_model_dataset(args):
             batch_size=args.batch_size,
             data_dir=args.data,
             seed=args.seed,
-            only_mark=True,
-            shuffle=True,
             no_aug=args.no_aug,
         )
 
