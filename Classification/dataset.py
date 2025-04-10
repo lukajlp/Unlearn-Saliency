@@ -853,7 +853,7 @@ def cifar10_idn_dataloaders(
 
     else:
         # Gerar features
-        data_tensor = torch.stack([train_transform(img) for img, _ in train_set])
+        data_tensor = torch.stack([img for img, _ in train_set])
         data_tensor = data_tensor.view(-1, 32 * 32 * 3)
 
         noise_labels = get_instance_noisy_label(
