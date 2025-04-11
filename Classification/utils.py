@@ -355,7 +355,7 @@ def setup_model_dataset(args):
         else:
             indexes_to_replace = args.indexes_to_replace
 
-        marked_loader, _, test_loader = cifar10_idn_dataloaders(
+        marked_loader, _, test_loader = cifar100_idn_dataloaders(
             batch_size=args.batch_size,
             data_dir=args.data,
             seed=args.seed,

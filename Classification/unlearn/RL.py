@@ -14,7 +14,7 @@ def RL(data_loaders, model, criterion, optimizer, epoch, args, mask=None):
     retain_loader = data_loaders["retain"]
     forget_dataset = deepcopy(forget_loader.dataset)
     
-    if args.dataset == "cifar100" or args.dataset == "TinyImagenet":
+    if args.dataset == "TinyImagenet":
         try:
             forget_dataset.targets = np.random.randint(0, args.num_classes, forget_dataset.targets.shape)
         except:
@@ -71,8 +71,14 @@ def RL(data_loaders, model, criterion, optimizer, epoch, args, mask=None):
                           epoch, i, loader_len, end-start, loss=losses, top1=top1))
                 start = time.time()
       
-    elif args.dataset == "cifar10" or args.dataset == "svhn":
-        losses = utils.AverageMeter()
+    elif (
+        args.dataset == "cifar10"
+        or args.dataset == "cifar100"
+        or args.dataset == "cifar10_idn"
+        or args.dataset == "cifar100_idn"
+        or args.dataset == "animal10n"
+        or args.dataset == "svhn"
+    ):        losses = utils.AverageMeter()
         top1 = utils.AverageMeter()
       
         # switch to train mode
