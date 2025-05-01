@@ -1010,7 +1010,6 @@ def cifar100_idn_dataloaders(
 def cifar10_openset_dataloaders(
     batch_size=128,
     data_dir="datasets/cifar10",
-    num_workers=2,
     seed=1,
     no_aug=False,
     noise_rate=0.0,
@@ -1046,84 +1045,97 @@ def cifar10_openset_dataloaders(
 
     train_set = CIFAR10(data_dir, train=True, transform=train_transform, download=True)
 
-    clean_labels = np.array(train_set.targets).copy()
-
     test_set = CIFAR10(data_dir, train=False, transform=test_transform, download=True)
 
-    # Carregar fonte para open noise (usando CIFAR-10 de teste)
-    open_data = None
-    if open_ratio > 0:
-        open_data = test_set.data
+    train_set.targets = np.array(train_set.targets)
+    test_set.targets = np.array(test_set.targets)
+    train_set_copy = copy.deepcopy(train_set)
+    train_idx = list(range(len(train_set)))
 
-    # Determine noise file name
+    if open_ratio > 0:
+        open_data = CIFAR100(data_dir, train=True, transform=train_transform, download=True)
+
     if noise_file is None:
         noise_file = f"cifar10_{noise_rate}_{open_ratio}_sym.json"
 
-    total_samples = len(train_set.data)
-    indices = np.arange(total_samples)
-
-    # Noise injection logic
     if os.path.exists(noise_file):
-        # Load existing noise configuration
         noise = json.load(open(noise_file, "r"))
         noise_labels = noise["noise_labels"]
         closed_noise = noise["closed_noise"]
-        open_noise = noise["open_noise"]
-        print(f"Carregando configuração do ruído a partir de {noise_file} ...")
-        train_set.targets = noise_labels
-        # Marca os índices dos open noise com clean label 10000
-        for idx in open_noise:
-            clean_labels[idx] = 10000
-        # Substitui as imagens dos open noise utilizando o open_data carregado
-        if open_data is not None:
-            for idx in open_noise:
-                chosen_idx = random.randint(0, len(open_data) - 1)
-                train_set.data[idx] = open_data[chosen_idx]
+
+        if open_ratio>0:
+            open_noise = noise["open_noise"]
+
+            for cleanIdx, noisyIdx in open_noise:
+                train_set.data[cleanIdx] = open_data[noisyIdx]
+                # marcar o rótulo OOD
+                train_set_copy.targets[cleanIdx] = 10000
+                noise_labels[cleanIdx] = 10000
+
+        train_set_copy.targets = np.array(noise_labels)
+        train_set.targets = train_set_copy.targets
 
     else:
-        # Injeta ruído no dataset de treinamento
-        np.random.seed(seed)
-        random.seed(seed)
-        noise_labels = list(train_set.targets)
-
-        num_total_noise = int(noise_rate * total_samples)
+        noise_labels = []
+        idx = train_idx
+        random.shuffle(idx)
+        num_total_noise = int(noise_rate * len(train_idx))
         num_open_noise = int(open_ratio * num_total_noise)
 
-        shuffled_indices = indices.copy()
-        np.random.shuffle(shuffled_indices)
-        open_noise = shuffled_indices[:num_open_noise].tolist()
-        closed_noise = shuffled_indices[num_open_noise:num_total_noise].tolist()
+        print(
+            "Statistics of synthetic noisy CIFAR dataset: ",
+            "num of clean samples: ",
+            len(train_idx) - num_total_noise,
+            " num of closed-set noise: ",
+            num_total_noise,
+            " num of open-set noise: ",
+            num_open_noise,
+        )
 
-        print("Estatísticas do dataset sintético com ruído no CIFAR-10:")
-        print("  Amostras limpas:", total_samples - num_total_noise)
-        print("  Amostras com closed-set noise:", len(closed_noise))
-        print("  Amostras com open-set noise:", len(open_noise))
+        target_noise_idx = train_idx
+        random.shuffle(target_noise_idx)
 
-        # Injeta ruído closed-set (ruído simétrico: rótulo aleatório entre 0 e 9)
-        for idx in closed_noise:
-            noise_labels[idx] = random.randint(0, 9)
-        # Injeta ruído open-set: substitui a imagem e marca o rótulo original como 10000
-        if open_data is not None:
-            for idx in open_noise:
-                chosen_idx = random.randint(0, len(open_data) - 1)
-                train_set.data[idx] = open_data[chosen_idx]
-                clean_labels[idx] = 10000
+        open_noise = list(
+            zip(idx[:num_open_noise], target_noise_idx[:num_open_noise]))
+        closed_noise = idx[num_open_noise:num_total_noise]
 
-        # Save noise configuration
-        noise_dict = {
+        for i in range(50000):
+            if i in closed_noise:
+                noiselabel = random.randint(0, 9)
+            
+                noise_labels.append(noiselabel)
+                train_set_copy.targets[i] = noiselabel
+            
+            else:
+                noise_labels.append(train_set_copy.targets[i])
+            
+
+        if open_ratio>0:
+            for cleanIdx, noisyIdx in open_noise:
+                train_set.data[cleanIdx] = open_data[noisyIdx]
+                # marcar o rótulo OOD
+                train_set_copy.targets[cleanIdx] = 10000
+                noise_labels[cleanIdx] = 10000
+
+        train_set.targets = train_set_copy.targets
+        noise_labels = [int(x) for x in noise_labels]
+        clean_idx = list(set(range(len(train_idx))) - set(closed_noise))
+
+        noise = {
             "noise_labels": noise_labels,
             "closed_noise": closed_noise,
             "open_noise": open_noise,
+            "clean_idx": clean_idx,
         }
-        print(f"Salvando configuração do ruído em {noise_file} ...")
-        json.dump(noise_dict, open(noise_file, "w"))
-        train_set.targets = noise_labels
 
-    # Atualiza os clean labels na instância customizada
-    train_set.clean_labels = clean_labels.tolist()
+        print(f"Salvando configuração do ruído em {noise_file} ...")
+        json.dump(noise, open(noise_file, "w"))
+
+    train_set.data = train_set_copy.data[train_idx]
+    train_set.targets = train_set_copy.targets[train_idx]
 
     # Create dataloaders
-    loader_args = {"num_workers": num_workers, "pin_memory": False}
+    loader_args = {"num_workers": 0, "pin_memory": False}
 
     def _init_fn(worker_id):
         np.random.seed(seed)
@@ -1132,7 +1144,7 @@ def cifar10_openset_dataloaders(
         train_set,
         batch_size=batch_size,
         shuffle=True,
-        worker_init_fn=_init_fn,
+        worker_init_fn=_init_fn if seed is not None else None,
         **loader_args,
     )
 
@@ -1140,7 +1152,7 @@ def cifar10_openset_dataloaders(
         test_set,
         batch_size=batch_size,
         shuffle=False,
-        worker_init_fn=_init_fn,
+        worker_init_fn=_init_fn if seed is not None else None,
         **loader_args,
     )
 
