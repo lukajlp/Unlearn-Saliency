@@ -1067,7 +1067,9 @@ def cifar10_openset_dataloaders(
             open_noise = noise["open_noise"]
 
             for cleanIdx, noisyIdx in open_noise:
-                train_set.data[cleanIdx] = open_data[noisyIdx][0]
+                train_set.data[cleanIdx] = (
+                    open_data[noisyIdx][0].numpy().transpose(1, 2, 0)
+                )
                 # marcar o rótulo OOD
                 train_set_copy.targets[cleanIdx] = 10000
                 noise_labels[cleanIdx] = 10000
@@ -1112,7 +1114,9 @@ def cifar10_openset_dataloaders(
 
         if open_ratio>0:
             for cleanIdx, noisyIdx in open_noise:
-                train_set.data[cleanIdx] = open_data[noisyIdx][0]
+                train_set.data[cleanIdx] = (
+                    open_data[noisyIdx][0].numpy().transpose(1, 2, 0)
+                )
                 # marcar o rótulo OOD
                 train_set_copy.targets[cleanIdx] = 10000
                 noise_labels[cleanIdx] = 10000
