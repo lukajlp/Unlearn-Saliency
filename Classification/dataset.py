@@ -1058,21 +1058,16 @@ def cifar10_openset_dataloaders(
     if noise_file is None:
         noise_file = f"cifar10_{noise_rate}_{open_ratio}_sym.json"
 
-    print(f"Verificando arquivo: {noise_file}")
-    print(f"Existe? {os.path.exists(noise_file)}")
-
     if os.path.exists(noise_file):
-        print("lendo arquivo:")
         noise = json.load(open(noise_file, "r"))
         noise_labels = noise["noise_labels"]
         closed_noise = noise["closed_noise"]
 
-        print("verificando open_ratio dentro arquivo")
         if open_ratio>0:
             open_noise = noise["open_noise"]
 
             for cleanIdx, noisyIdx in open_noise:
-                train_set.data[cleanIdx] = open_data[noisyIdx]
+                train_set.data[cleanIdx] = open_data[noisyIdx][0]
                 # marcar o rótulo OOD
                 train_set_copy.targets[cleanIdx] = 10000
                 noise_labels[cleanIdx] = 10000
@@ -1117,7 +1112,7 @@ def cifar10_openset_dataloaders(
 
         if open_ratio>0:
             for cleanIdx, noisyIdx in open_noise:
-                train_set.data[cleanIdx] = open_data[noisyIdx]
+                train_set.data[cleanIdx] = open_data[noisyIdx][0]
                 # marcar o rótulo OOD
                 train_set_copy.targets[cleanIdx] = 10000
                 noise_labels[cleanIdx] = 10000
