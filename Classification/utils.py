@@ -386,7 +386,6 @@ def setup_model_dataset(args):
         train_full_loader, val_loader, _ = cifar10_openset_dataloaders(
             batch_size=args.batch_size,
             data_dir=args.data,
-            num_workers=args.workers,
             noise_rate=args.noise_rate,
             open_ratio=args.open_ratio,
         )
@@ -394,7 +393,6 @@ def setup_model_dataset(args):
         marked_loader, _, test_loader = cifar10_openset_dataloaders(
             batch_size=args.batch_size,
             data_dir=args.data,
-            num_workers=args.workers,
             seed=args.seed,
             no_aug=args.no_aug,
             noise_rate=args.noise_rate,
