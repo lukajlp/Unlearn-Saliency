@@ -1070,9 +1070,6 @@ def cifar10_openset_dataloaders(
                 train_set.data[cleanIdx] = (
                     open_data[noisyIdx][0].numpy().transpose(1, 2, 0)
                 )
-                # marcar o rótulo OOD
-                train_set_copy.targets[cleanIdx] = 10000
-                noise_labels[cleanIdx] = 10000
 
         train_set_copy.targets = np.array(noise_labels)
         train_set.targets = train_set_copy.targets
@@ -1117,9 +1114,6 @@ def cifar10_openset_dataloaders(
                 train_set.data[cleanIdx] = (
                     open_data[noisyIdx][0].numpy().transpose(1, 2, 0)
                 )
-                # marcar o rótulo OOD
-                train_set_copy.targets[cleanIdx] = 10000
-                noise_labels[cleanIdx] = 10000
 
         train_set.targets = train_set_copy.targets
         noise_labels = [int(x) for x in noise_labels]

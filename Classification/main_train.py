@@ -53,7 +53,7 @@ def main():
     print(f"number of train dataset {len(train_loader.dataset)}")
     print(f"number of val dataset {len(val_loader.dataset)}")
 
-    criterion = nn.CrossEntropyLoss(ignore_index=10000)
+    criterion = nn.CrossEntropyLoss()
     decreasing_lr = list(map(int, args.decreasing_lr.split(",")))
 
     optimizer = torch.optim.SGD(
