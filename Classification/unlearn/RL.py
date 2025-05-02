@@ -85,6 +85,7 @@ def RL(data_loaders, model, criterion, optimizer, epoch, args, mask=None):
         args.dataset == "cifar10"
         or args.dataset == "cifar100"
         or args.dataset == "cifar10_idn"
+        or args.dataset == "cifar10_open"
         or args.dataset == "cifar100_idn"
         or args.dataset == "animal10n"
         or args.dataset == "svhn"
