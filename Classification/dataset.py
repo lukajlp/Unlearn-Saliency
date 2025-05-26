@@ -1162,19 +1162,30 @@ class Food101NDataset(Dataset):
     Classe Dataset para carregar o Food-101N a partir dos arquivos
     'verified_train.tsv' e 'verified_val.tsv' e da pasta de imagens.
     """
-    def __init__(self, root_dir, class_to_idx, use_train=True, use_val=True, transform=None):
+    def __init__(self, root_dir, use_train=True, use_val=True, transform=None):
         """
         Args:
             root_dir (str): Caminho para o diretório raiz do Food-101N
                             (que contém a pasta 'images' e 'meta').
             use_train (bool): Se True, carrega dados de 'verified_train.tsv'.
             use_val (bool): Se True, carrega dados de 'verified_val.tsv'.
-            class_to_idx (dict): Dicionário mapeando nomes de classes para índices.
             transform (callable, optional): Transformações a serem aplicadas nas imagens.
         """
         self.root_dir = root_dir
         self.transform = transform
-        self.class_to_idx = class_to_idx
+        
+        # Ler class_to_idx de classes.txt
+        self.class_to_idx = {}
+        classes_file_path = os.path.join(root_dir, "meta", "classes.txt")
+        if not os.path.exists(classes_file_path):
+            raise FileNotFoundError(f"Arquivo classes.txt não encontrado em: {classes_file_path}")
+        with open(classes_file_path, 'r') as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines[1:]): # Pula a primeira linha (cabeçalho)
+                class_name = line.strip()
+                if class_name:
+                    self.class_to_idx[class_name] = i
+
         self.image_dir = os.path.join(root_dir, "images")
         self.meta_dir = os.path.join(root_dir, "meta")
 
@@ -1289,21 +1300,11 @@ def food101n_dataloaders(
         transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
     ])
 
-    print(f"Carregando Food-101 Test Set de {food101_dir}...")
-    test_set = Food101(
-        root=food101_dir,
-        split="test",
-        transform=test_transform,
-        download=True
-    )
-    class_to_idx = test_set.class_to_idx
-
     print(f"Carregando Food-101N Train+Val Set de {food101n_dir}...")
     train_set = Food101NDataset(
         root_dir=food101n_dir,
         use_train=True,
         use_val=True,
-        class_to_idx=class_to_idx,
         transform=train_transform,
     )
 
@@ -1312,6 +1313,15 @@ def food101n_dataloaders(
 
     def _init_fn(worker_id):
         np.random.seed(int(seed) + worker_id)
+
+    # Carregar o test_set do Food-101 original para avaliação
+    print(f"Carregando Food-101 Test Set de {food101_dir} para avaliação...")
+    test_set = Food101( 
+        root=food101_dir,
+        split="test",
+        transform=test_transform,
+        download=True 
+    )
 
     train_loader = DataLoader(
         train_set,
