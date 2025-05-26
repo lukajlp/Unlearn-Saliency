@@ -89,6 +89,7 @@ def RL(data_loaders, model, criterion, optimizer, epoch, args, mask=None):
         or args.dataset == "cifar100_idn"
         or args.dataset == "animal10n"
         or args.dataset == "svhn"
+        or args.dataset == "food101n"
     ):
         losses = utils.AverageMeter()
         top1 = utils.AverageMeter()
