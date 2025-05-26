@@ -421,8 +421,8 @@ def setup_model_dataset(args):
 
         train_loader, test_loader = food101n_dataloaders(
             batch_size=args.batch_size,
-            food101n_dir=args.data,
-            food101_dir=args.data,
+            food101n_dir=args.data + "/food-101n",
+            food101_dir=args.data + "/food101",
             num_workers=args.workers,
             seed=args.seed,
             no_aug=args.no_aug,
