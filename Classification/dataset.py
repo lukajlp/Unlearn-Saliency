@@ -19,8 +19,9 @@ from PIL import Image
 from scipy import stats
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
-from torchvision.datasets import CIFAR10, CIFAR100, SVHN, ImageFolder
+from torchvision.datasets import CIFAR10, CIFAR100, Food101, SVHN, ImageFolder
 from tqdm import tqdm
+import pandas as pd
 
 
 def cifar10_dataloaders_no_val(
@@ -1156,65 +1157,167 @@ def cifar10_openset_dataloaders(
 
     return train_loader, test_loader, test_loader
 
-def animal10n_dataloaders(
+class Food101NDataset(Dataset):
+    """
+    Classe Dataset para carregar o Food-101N a partir dos arquivos
+    'verified_train.tsv' e 'verified_val.tsv' e da pasta de imagens.
+    """
+    def __init__(self, root_dir, class_to_idx, use_train=True, use_val=True, transform=None):
+        """
+        Args:
+            root_dir (str): Caminho para o diretório raiz do Food-101N
+                            (que contém a pasta 'images' e 'meta').
+            use_train (bool): Se True, carrega dados de 'verified_train.tsv'.
+            use_val (bool): Se True, carrega dados de 'verified_val.tsv'.
+            class_to_idx (dict): Dicionário mapeando nomes de classes para índices.
+            transform (callable, optional): Transformações a serem aplicadas nas imagens.
+        """
+        self.root_dir = root_dir
+        self.transform = transform
+        self.class_to_idx = class_to_idx
+        self.image_dir = os.path.join(root_dir, "images")
+        self.meta_dir = os.path.join(root_dir, "meta")
+
+        if not (use_train or use_val):
+            raise ValueError("Pelo menos um 'use_train' ou 'use_val' deve ser True.")
+
+        tsv_files_to_load = []
+        if use_train:
+            tsv_files_to_load.append(os.path.join(self.meta_dir, "verified_train.tsv"))
+        if use_val:
+            tsv_files_to_load.append(os.path.join(self.meta_dir, "verified_val.tsv"))
+
+        # Carregar e concatenar os dados dos arquivos TSV
+        all_data = []
+        for tsv_file in tsv_files_to_load:
+            if not os.path.exists(tsv_file):
+                 raise FileNotFoundError(f"Arquivo TSV não encontrado: {tsv_file}")
+            # Os TSVs verificados têm cabeçalho? Pela descrição, parece que não.
+            # Vamos assumir que não têm e nomear as colunas. Ajuste se necessário.
+            try:
+                df = pd.read_csv(tsv_file, sep='\t', header=None, names=['img_path', 'verification_label'])
+                all_data.append(df)
+            except Exception as e:
+                print(f"Erro ao ler {tsv_file}: {e}")
+                raise
+
+        self.annotations = pd.concat(all_data, ignore_index=True)
+
+        # Extrair a classe (rótulo ruidoso) e a chave da imagem do 'img_path'
+        # Ex: 'apple_pie/1005649.jpg' -> classe = 'apple_pie', chave = '1005649.jpg'
+        self.annotations['class_name'] = self.annotations['img_path'].apply(lambda x: x.split('/')[0])
+        self.annotations['img_key'] = self.annotations['img_path'].apply(lambda x: x.split('/')[1])
+
+        # Mapear os rótulos (nomes) para índices inteiros
+        self.annotations['label_idx'] = self.annotations['class_name'].apply(
+            lambda x: self.class_to_idx[x]
+        )
+
+        # Guardar os caminhos completos para acesso rápido
+        self.image_paths = self.annotations['img_path'].tolist()
+        self.labels = self.annotations['label_idx'].tolist()
+        self.verification_labels = self.annotations['verification_label'].tolist()
+
+        print(f"Food-101N: Carregado {len(self.annotations)} amostras.")
+        num_clean = sum(self.verification_labels)
+        num_noisy = len(self.annotations) - num_clean
+        print(f"  -> Amostras Limpas (verificadas=1): {num_clean}")
+        print(f"  -> Amostras Ruidosas (verificadas=0): {num_noisy}")
+
+
+    def __len__(self):
+        return len(self.annotations)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        # Obter o caminho relativo, o rótulo e a verificação
+        img_relative_path = self.image_paths[idx]
+        label = self.labels[idx]
+        # verification = self.verification_labels[idx] # Você pode retornar isso se precisar
+
+        img_full_path = os.path.join(self.image_dir, img_relative_path)
+
+        # Carregar a imagem
+        try:
+            image = Image.open(img_full_path).convert('RGB')
+        except FileNotFoundError:
+            print(f"Aviso: Imagem não encontrada em {img_full_path}. Pulando item {idx}.")
+            return self.__getitem__((idx + 1) % len(self))
+        except Exception as e:
+            print(f"Aviso: Erro ao carregar {img_full_path}: {e}. Pulando item {idx}.")
+            return self.__getitem__((idx + 1) % len(self))
+
+        # Aplicar transformações
+        if self.transform:
+            image = self.transform(image)
+
+        # Retorna a imagem e o rótulo (ruidoso).
+        # Se precisar saber se é limpo/ruidoso, retorne 'verification' também.
+        return image, label
+        # Ou: return image, label, verification
+
+def food101n_dataloaders(
     batch_size=128,
-    data_dir="/mnt/hd_pesquisa/pesquisa/datasets/animal10n",
+    food101n_dir="datasets/food-101n",
+    food101_dir="datasets/food101",
     num_workers=2,
-    seed=1,
+    seed: int = 1,
     no_aug=False,
 ):
-    class InlineAnimal10NDataset(Dataset):
-        def __init__(self, root, transform=None, mode='train'):
-            self.transform = transform
-            dir_path = os.path.join(os.path.abspath(root), mode)
-            self.files = os.listdir(dir_path)
-            self.targets = [int(f.split('_')[0]) for f in self.files]
-            self.paths = [os.path.join(dir_path, f) for f in self.files]
-
-        def __getitem__(self, index):
-            path = self.paths[index]
-            target = self.targets[index]
-            image = Image.open(path).convert('RGB')
-            if self.transform:
-                image = self.transform(image)
-            return image, target, index
-
-        def __len__(self):
-            return len(self.targets)
-
     if no_aug:
         train_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
             transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
     else:
         train_transform = transforms.Compose([
-            transforms.RandomResizedCrop(32, padding=4),
+            transforms.Resize(256),
+            transforms.RandomCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
 
     test_transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
         transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
     ])
 
-    print("Carregando Animal10N:")
-    print(" - Treinamento: pasta 'training'")
-    print(" - Teste: pasta 'testing'")
+    print(f"Carregando Food-101 Test Set de {food101_dir}...")
+    test_set = Food101(
+        root=food101_dir,
+        split="test",
+        transform=test_transform,
+        download=True
+    )
+    class_to_idx = test_set.class_to_idx
 
-    train_set = InlineAnimal10NDataset(root=data_dir, transform=train_transform, mode='training')
-    test_set = InlineAnimal10NDataset(root=data_dir, transform=test_transform, mode='testing')
+    print(f"Carregando Food-101N Train+Val Set de {food101n_dir}...")
+    train_set = Food101NDataset(
+        root_dir=food101n_dir,
+        use_train=True,
+        use_val=True,
+        class_to_idx=class_to_idx,
+        transform=train_transform,
+    )
 
-    loader_args = {"num_workers": num_workers, "pin_memory": False}
+    # --- Criar DataLoaders ---
+    loader_args = {"num_workers": num_workers, "pin_memory": True}
 
     def _init_fn(worker_id):
-        np.random.seed(seed + worker_id)
-        random.seed(seed + worker_id)
+        np.random.seed(int(seed) + worker_id)
 
     train_loader = DataLoader(
         train_set,
         batch_size=batch_size,
         shuffle=True,
-        worker_init_fn=_init_fn,
+        worker_init_fn=_init_fn if seed is not None else None,
         **loader_args,
     )
 
@@ -1222,11 +1325,11 @@ def animal10n_dataloaders(
         test_set,
         batch_size=batch_size,
         shuffle=False,
-        worker_init_fn=_init_fn,
+        worker_init_fn=_init_fn if seed is not None else None,
         **loader_args,
     )
 
-    return train_loader, test_loader, test_loader
+    return train_loader, test_loader
 
 def replace_indexes(
     dataset: torch.utils.data.Dataset, indexes, seed=0, only_mark: bool = False
