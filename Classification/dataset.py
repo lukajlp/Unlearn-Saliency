@@ -1162,6 +1162,7 @@ class Food101NDataset(Dataset):
     Classe Dataset para carregar o Food-101N a partir dos arquivos
     'verified_train.tsv' e 'verified_val.tsv' e da pasta de imagens.
     """
+
     def __init__(self, root_dir, use_train=True, use_val=True, transform=None):
         """
         Args:
@@ -1173,15 +1174,17 @@ class Food101NDataset(Dataset):
         """
         self.root_dir = root_dir
         self.transform = transform
-        
+
         # Ler class_to_idx de classes.txt
         self.class_to_idx = {}
         classes_file_path = os.path.join(root_dir, "meta", "classes.txt")
         if not os.path.exists(classes_file_path):
-            raise FileNotFoundError(f"Arquivo classes.txt não encontrado em: {classes_file_path}")
-        with open(classes_file_path, 'r') as f:
+            raise FileNotFoundError(
+                f"Arquivo classes.txt não encontrado em: {classes_file_path}"
+            )
+        with open(classes_file_path, "r") as f:
             lines = f.readlines()
-            for i, line in enumerate(lines[1:]): # Pula a primeira linha (cabeçalho)
+            for i, line in enumerate(lines[1:]):  # Pula a primeira linha (cabeçalho)
                 class_name = line.strip()
                 if class_name:
                     self.class_to_idx[class_name] = i
@@ -1202,11 +1205,15 @@ class Food101NDataset(Dataset):
         all_data = []
         for tsv_file in tsv_files_to_load:
             if not os.path.exists(tsv_file):
-                 raise FileNotFoundError(f"Arquivo TSV não encontrado: {tsv_file}")
-            # Os TSVs verificados têm cabeçalho? Pela descrição, parece que não.
-            # Vamos assumir que não têm e nomear as colunas. Ajuste se necessário.
+                raise FileNotFoundError(f"Arquivo TSV não encontrado: {tsv_file}")
             try:
-                df = pd.read_csv(tsv_file, sep='\t', header=None, names=['img_path', 'verification_label'])
+                df = pd.read_csv(
+                    tsv_file,
+                    sep="\t",
+                    header=None,
+                    names=["img_path", "verification_label"],
+                    skiprows=1,
+                )
                 all_data.append(df)
             except Exception as e:
                 print(f"Erro ao ler {tsv_file}: {e}")
@@ -1216,25 +1223,28 @@ class Food101NDataset(Dataset):
 
         # Extrair a classe (rótulo ruidoso) e a chave da imagem do 'img_path'
         # Ex: 'apple_pie/1005649.jpg' -> classe = 'apple_pie', chave = '1005649.jpg'
-        self.annotations['class_name'] = self.annotations['img_path'].apply(lambda x: x.split('/')[0])
-        self.annotations['img_key'] = self.annotations['img_path'].apply(lambda x: x.split('/')[1])
+        self.annotations["class_name"] = self.annotations["img_path"].apply(
+            lambda x: x.split("/")[0]
+        )
+        self.annotations["img_key"] = self.annotations["img_path"].apply(
+            lambda x: x.split("/")[1]
+        )
 
         # Mapear os rótulos (nomes) para índices inteiros
-        self.annotations['label_idx'] = self.annotations['class_name'].apply(
+        self.annotations["label_idx"] = self.annotations["class_name"].apply(
             lambda x: self.class_to_idx[x]
         )
 
         # Guardar os caminhos completos para acesso rápido
-        self.image_paths = self.annotations['img_path'].tolist()
-        self.labels = self.annotations['label_idx'].tolist()
-        self.verification_labels = self.annotations['verification_label'].tolist()
+        self.image_paths = self.annotations["img_path"].tolist()
+        self.labels = self.annotations["label_idx"].tolist()
+        self.verification_labels = self.annotations["verification_label"].tolist()
 
         print(f"Food-101N: Carregado {len(self.annotations)} amostras.")
         num_clean = sum(self.verification_labels)
         num_noisy = len(self.annotations) - num_clean
         print(f"  -> Amostras Limpas (verificadas=1): {num_clean}")
         print(f"  -> Amostras Ruidosas (verificadas=0): {num_noisy}")
-
 
     def __len__(self):
         return len(self.annotations)
@@ -1252,9 +1262,11 @@ class Food101NDataset(Dataset):
 
         # Carregar a imagem
         try:
-            image = Image.open(img_full_path).convert('RGB')
+            image = Image.open(img_full_path).convert("RGB")
         except FileNotFoundError:
-            print(f"Aviso: Imagem não encontrada em {img_full_path}. Pulando item {idx}.")
+            print(
+                f"Aviso: Imagem não encontrada em {img_full_path}. Pulando item {idx}."
+            )
             return self.__getitem__((idx + 1) % len(self))
         except Exception as e:
             print(f"Aviso: Erro ao carregar {img_full_path}: {e}. Pulando item {idx}.")
@@ -1269,6 +1281,7 @@ class Food101NDataset(Dataset):
         return image, label
         # Ou: return image, label, verification
 
+
 def food101n_dataloaders(
     batch_size=128,
     food101n_dir="datasets/food-101n",
@@ -1278,27 +1291,33 @@ def food101n_dataloaders(
     no_aug=False,
 ):
     if no_aug:
-        train_transform = transforms.Compose([
+        train_transform = transforms.Compose(
+            [
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ]
+        )
+    else:
+        train_transform = transforms.Compose(
+            [
+                transforms.Resize(256),
+                transforms.RandomCrop(224),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ]
+        )
+
+    test_transform = transforms.Compose(
+        [
             transforms.Resize(256),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
-        ])
-    else:
-        train_transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.RandomCrop(224),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
-        ])
-
-    test_transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
-    ])
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ]
+    )
 
     print(f"Carregando Food-101N Train+Val Set de {food101n_dir}...")
     train_set = Food101NDataset(
@@ -1316,11 +1335,8 @@ def food101n_dataloaders(
 
     # Carregar o test_set do Food-101 original para avaliação
     print(f"Carregando Food-101 Test Set de {food101_dir} para avaliação...")
-    test_set = Food101( 
-        root=food101_dir,
-        split="test",
-        transform=test_transform,
-        download=True 
+    test_set = Food101(
+        root=food101_dir, split="test", transform=test_transform, download=True
     )
 
     train_loader = DataLoader(
@@ -1340,6 +1356,7 @@ def food101n_dataloaders(
     )
 
     return train_loader, test_loader
+
 
 def replace_indexes(
     dataset: torch.utils.data.Dataset, indexes, seed=0, only_mark: bool = False
