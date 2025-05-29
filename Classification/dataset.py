@@ -1283,7 +1283,7 @@ class Food101NDataset(Dataset):
 
 
 def food101n_dataloaders(
-    batch_size=48,
+    batch_size=128,
     food101n_dir="datasets/food-101n",
     food101_dir="datasets/food101",
     num_workers=2,
