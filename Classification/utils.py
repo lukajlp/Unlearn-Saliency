@@ -419,21 +419,38 @@ def setup_model_dataset(args):
             mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
         )
 
-        train_loader, test_loader = food101n_dataloaders(
+        print(
+            "--- Carregando Food-101N: Standard Training Loader (train_full_loader) ---"
+        )
+        train_full_loader, test_loader = food101n_dataloaders(
             batch_size=args.batch_size,
             food101n_dir=args.data + "/food-101n",
             food101_dir=args.data + "/food101",
             num_workers=args.workers,
             seed=args.seed,
             no_aug=args.no_aug,
+            mark_verified_noisy_forget=False
         )
 
-        val_loader = test_loader
-        marked_loader = None
+        marked_loader, val_loader = food101n_dataloaders( # Não precisamos do test_loader desta chamada
+            batch_size=args.batch_size, 
+            food101n_dir=args.data + "/food-101n",
+            food101_dir=args.data + "/food101",
+            num_workers=args.workers,
+            seed=args.seed, 
+            no_aug=args.no_aug,
+            mark_verified_noisy_forget=True
+        )
 
         print(f"Dataset: Food-101N. Classes: {classes}.")
-        print(f"Train loader size: {len(train_loader)} batches")
-        print(f"Test loader size: {len(test_loader)} batches")
+        if train_full_loader and train_full_loader.dataset:
+            print(f"Train loader (full) size: {len(train_full_loader)} batches ({len(train_full_loader.dataset)} amostras)")
+        if marked_loader and marked_loader.dataset:
+            print(f"Marked loader size: {len(marked_loader)} batches ({len(marked_loader.dataset)} amostras)")
+            num_actually_marked = np.sum(np.array(marked_loader.dataset.targets) < 0)
+            print(f"  -> Amostras com target negativo no marked_loader.dataset: {num_actually_marked}")
+        if test_loader and test_loader.dataset:
+            print(f"Test loader size: {len(test_loader)} batches ({len(test_loader.dataset)} amostras)")
 
         if args.train_seed is None:
             args.train_seed = args.seed
@@ -448,7 +465,7 @@ def setup_model_dataset(args):
 
         model.normalize = normalization
 
-        return model, train_loader, val_loader, test_loader, marked_loader
+        return model, train_full_loader, val_loader, test_loader, marked_loader
 
     else:
         raise ValueError("Dataset not supprot yet !")

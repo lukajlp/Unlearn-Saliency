@@ -1175,7 +1175,6 @@ class Food101NDataset(Dataset):
         self.root_dir = root_dir
         self.transform = transform
 
-        # Ler class_to_idx de classes.txt
         self.class_to_idx = {}
         classes_file_path = os.path.join(root_dir, "meta", "classes.txt")
         if not os.path.exists(classes_file_path):
@@ -1184,10 +1183,12 @@ class Food101NDataset(Dataset):
             )
         with open(classes_file_path, "r") as f:
             lines = f.readlines()
-            for i, line in enumerate(lines[1:]):  # Pula a primeira linha (cabeçalho)
-                class_name = line.strip()
-                if class_name:
-                    self.class_to_idx[class_name] = i
+            for i, line_content in enumerate(
+                lines[1:]
+            ):  # Pula a primeira linha (cabeçalho)
+                class_name_val = line_content.strip()
+                if class_name_val:
+                    self.class_to_idx[class_name_val] = i
 
         self.image_dir = os.path.join(root_dir, "images")
         self.meta_dir = os.path.join(root_dir, "meta")
@@ -1201,7 +1202,6 @@ class Food101NDataset(Dataset):
         if use_val:
             tsv_files_to_load.append(os.path.join(self.meta_dir, "verified_val.tsv"))
 
-        # Carregar e concatenar os dados dos arquivos TSV
         all_data = []
         for tsv_file in tsv_files_to_load:
             if not os.path.exists(tsv_file):
@@ -1220,66 +1220,72 @@ class Food101NDataset(Dataset):
                 raise
 
         self.annotations = pd.concat(all_data, ignore_index=True)
-
-        # Extrair a classe (rótulo ruidoso) e a chave da imagem do 'img_path'
-        # Ex: 'apple_pie/1005649.jpg' -> classe = 'apple_pie', chave = '1005649.jpg'
         self.annotations["class_name"] = self.annotations["img_path"].apply(
-            lambda x: x.split("/")[0]
-        )
-        self.annotations["img_key"] = self.annotations["img_path"].apply(
-            lambda x: x.split("/")[1]
+            lambda x: str(x).split("/")[0]
         )
 
-        # Mapear os rótulos (nomes) para índices inteiros
+        valid_class_mask = self.annotations["class_name"].isin(self.class_to_idx.keys())
+        if not valid_class_mask.all():
+            num_filtered_out = sum(~valid_class_mask)
+            print(
+                f"Food-101N AVISO: Filtrando {num_filtered_out} amostras devido a nomes de classes desconhecidos derivados do img_path."
+            )
+            self.annotations = self.annotations[valid_class_mask].reset_index(drop=True)
+
+        if len(self.annotations) == 0:
+            raise ValueError(
+                "Food-101N ERRO: Nenhuma amostra válida restante após filtrar nomes de classes desconhecidos."
+            )
+
         self.annotations["label_idx"] = self.annotations["class_name"].apply(
             lambda x: self.class_to_idx[x]
         )
 
-        # Guardar os caminhos completos para acesso rápido
-        self.image_paths = self.annotations["img_path"].tolist()
-        self.labels = self.annotations["label_idx"].tolist()
-        self.verification_labels = self.annotations["verification_label"].tolist()
+        self.image_paths = self.annotations["img_path"].tolist()  # Lista de strings
+        self.targets = self.annotations["label_idx"].to_numpy(
+            dtype=np.int64
+        )  # Array NumPy de targets
+        self.verification_labels = self.annotations["verification_label"].to_numpy(
+            dtype=np.int64
+        )  # Array NumPy
 
-        print(f"Food-101N: Carregado {len(self.annotations)} amostras.")
-        num_clean = sum(self.verification_labels)
-        num_noisy = len(self.annotations) - num_clean
-        print(f"  -> Amostras Limpas (verificadas=1): {num_clean}")
-        print(f"  -> Amostras Ruidosas (verificadas=0): {num_noisy}")
+        print(
+            f"Food-101N: Carregado {len(self.targets)} amostras após filtragem inicial."
+        )
+        if len(self.targets) > 0:
+            num_clean = np.sum(self.verification_labels == 1)
+            num_noisy = np.sum(self.verification_labels == 0)
+            print(f"  -> Amostras Limpas (verificadas=1): {num_clean}")
+            print(f"  -> Amostras Ruidosas (verificadas=0): {num_noisy}")
 
     def __len__(self):
-        return len(self.annotations)
+        return len(self.targets)  # Baseado no número atual de targets
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        # Obter o caminho relativo, o rótulo e a verificação
         img_relative_path = self.image_paths[idx]
-        label = self.labels[idx]
-        # verification = self.verification_labels[idx] # Você pode retornar isso se precisar
+        label = int(
+            self.targets[idx]
+        )  # Targets já é um array numpy, converter para int
 
         img_full_path = os.path.join(self.image_dir, img_relative_path)
-
-        # Carregar a imagem
         try:
             image = Image.open(img_full_path).convert("RGB")
         except FileNotFoundError:
             print(
                 f"Aviso: Imagem não encontrada em {img_full_path}. Pulando item {idx}."
             )
+            # Tratar erro de forma mais robusta se necessário
             return self.__getitem__((idx + 1) % len(self))
         except Exception as e:
             print(f"Aviso: Erro ao carregar {img_full_path}: {e}. Pulando item {idx}.")
             return self.__getitem__((idx + 1) % len(self))
 
-        # Aplicar transformações
         if self.transform:
             image = self.transform(image)
-
-        # Retorna a imagem e o rótulo (ruidoso).
-        # Se precisar saber se é limpo/ruidoso, retorne 'verification' também.
         return image, label
-        # Ou: return image, label, verification
 
 
 def food101n_dataloaders(
@@ -1289,6 +1295,7 @@ def food101n_dataloaders(
     num_workers=2,
     seed: int = 1,
     no_aug=False,
+    mark_verified_noisy_forget: bool = False,
 ):
     if no_aug:
         train_transform = transforms.Compose(
@@ -1327,19 +1334,32 @@ def food101n_dataloaders(
         transform=train_transform,
     )
 
+    if mark_verified_noisy_forget:
+        print(
+            "INFO: Marcando amostras ruidosas verificadas (verification_label=0) para esquecimento no Food-101N."
+        )
+        num_marked = 0
+        for i in range(len(train_set.targets)):
+            if (
+                train_set.verification_labels[i] == 0
+            ):  # Se a amostra é ruidosa verificada
+                original_target = train_set.targets[i]
+                if (
+                    original_target >= 0
+                ):  # Marcar apenas se não estiver já marcado (negativo)
+                    train_set.targets[i] = -original_target - 1
+                    num_marked += 1
+        print(
+            f"INFO: {num_marked} amostras marcadas para esquecimento (baseado em verification_label=0)."
+        )
+
     # --- Criar DataLoaders ---
     loader_args = {"num_workers": num_workers, "pin_memory": True}
 
     def _init_fn(worker_id):
         np.random.seed(int(seed) + worker_id)
 
-    # Carregar o test_set do Food-101 original para avaliação
-    print(f"Carregando Food-101 Test Set de {food101_dir} para avaliação...")
-    test_set = Food101(
-        root=food101_dir, split="test", transform=test_transform, download=True
-    )
-
-    train_loader = DataLoader(
+    data_loader = DataLoader(
         train_set,
         batch_size=batch_size,
         shuffle=True,
@@ -1347,6 +1367,11 @@ def food101n_dataloaders(
         **loader_args,
     )
 
+    # Carregar o test_set do Food-101 original para avaliação
+    print(f"Carregando Food-101 Test Set de {food101_dir} para avaliação...")
+    test_set = Food101(
+        root=food101_dir, split="test", transform=test_transform, download=True
+    )
     test_loader = DataLoader(
         test_set,
         batch_size=batch_size,
@@ -1355,7 +1380,9 @@ def food101n_dataloaders(
         **loader_args,
     )
 
-    return train_loader, test_loader
+    # data_loader é o train_loader (se mark_verified_noisy_forget=False)
+    # ou o marked_loader (se mark_verified_noisy_forget=True)
+    return data_loader, test_loader
 
 
 def replace_indexes(
