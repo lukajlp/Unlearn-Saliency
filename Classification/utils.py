@@ -197,8 +197,28 @@ def setup_model_dataset(args):
 
         if args.indexes_to_replace is not None:
             noise_file = f"cifar100_{args.noise_rate}_sym.json"
-            noise = json.load(open(noise_file, "r"))
-            indexes_to_replace = noise["closed_noise"]
+
+            with open(noise_file, "r") as f:
+                noise = json.load(f)
+
+            all_indexes_from_file = noise["closed_noise"]
+            num_total_indexes = len(all_indexes_from_file)
+
+            percentage_to_select = args.indexes_percentage
+            num_to_select = int(num_total_indexes * percentage_to_select)
+
+            random.seed(args.seed)
+            indexes_to_replace = random.sample(all_indexes_from_file, num_to_select)
+
+            print(
+                f"Número original de índices do arquivo '{noise_file}': {num_total_indexes}"
+            )
+            print(
+                f"Porcentagem de 'args.indexes_percentage' aplicada: {percentage_to_select * 100:.1f}%"
+            )
+            print(
+                f"Número de índices selecionados aleatoriamente: {len(indexes_to_replace)}"
+            )
         else:
             indexes_to_replace = args.indexes_to_replace
 
