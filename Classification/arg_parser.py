@@ -142,7 +142,7 @@ def parse_args():
         help="Specific index data to forget",
     )
     parser.add_argument(
-        "indexes_percentage",
+        "--indexes_percentage",
         type=float,
         default=1.0,
         help="Percentage of data to forget",
