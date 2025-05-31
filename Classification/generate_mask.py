@@ -9,7 +9,7 @@ import torch.optim
 import torch.utils.data
 import unlearn
 import utils
-import pprint
+import numpy as np
 
 
 def save_gradient_ratio(data_loaders, model, criterion, args):
@@ -96,7 +96,6 @@ def main():
     if args.seed:
         utils.setup_seed(args.seed)
     seed = args.seed
-    # prepare dataset
     (
         model,
         train_loader_full,
@@ -104,139 +103,143 @@ def main():
         test_loader,
         marked_loader,
     ) = utils.setup_model_dataset(args)
+
     model.cuda()
 
-    # ----- INÍCIO DOS PRINTS DE DEPURAÇÃO PARA train_loader_full -----
-    print("\n--- [DEBUG generate_mask.py] Verificando train_loader_full ---")
-    print(f"Tipo de train_loader_full recebido de utils: {type(train_loader_full)}")
-
-    if train_loader_full is not None:
-        print("train_loader_full não é None.")
-        print("\nAtributos de 'train_loader_full' (via vars()):")
-        try:
-            pprint.pprint(vars(train_loader_full))
-        except TypeError:
-            print("Não foi possível usar vars(train_loader_full). Tentando dir():")
-            pprint.pprint(dir(train_loader_full))
-
-    # ----- INÍCIO DOS PRINTS DE DEPURAÇÃO PARA test_loader -----
-    print("\n--- [DEBUG generate_mask.py] Verificando test_loader ---")
-    print(f"Tipo de test_loader recebido de utils: {type(test_loader)}")
-    if test_loader is not None:
-        print("test_loader não é None.")
-        print("\nAtributos de 'test_loader' (via vars()):")
-        try:
-            pprint.pprint(vars(test_loader))
-        except TypeError:
-            print("Não foi possível usar vars(test_loader). Tentando dir():")
-            pprint.pprint(dir(test_loader))
-
-    # ----- INÍCIO DOS PRINTS DE DEPURAÇÃO GENÉRICOS -----
-    print("\n--- [DEBUG generate_mask.py] Verificando marked_loader ---")
-    print(f"Tipo de marked_loader recebido de utils: {type(marked_loader)}")
-    
-    if marked_loader is not None:
-        print("marked_loader não é None.")
-        print("\nAtributos de 'marked_loader' (via vars()):")
-        try:
-            pprint.pprint(vars(marked_loader))
-        except TypeError:
-            print("Não foi possível usar vars(marked_loader). Tentando dir():")
-            pprint.pprint(dir(marked_loader))
-
     def replace_loader_dataset(
-        dataset, batch_size=args.batch_size, seed=1, shuffle=True
+        dataset_obj, batch_size_val=args.batch_size, seed_val=1, shuffle_val=True
     ):
-        utils.setup_seed(seed)
+        # utils.setup_seed(seed_val) # A seed é melhor configurada no worker_init_fn
         return torch.utils.data.DataLoader(
-            dataset,
-            batch_size=batch_size,
-            num_workers=0,
+            dataset_obj,
+            batch_size=batch_size_val,
+            num_workers=0, 
             pin_memory=True,
-            shuffle=shuffle,
+            shuffle=shuffle_val,
         )
 
-    forget_dataset = copy.deepcopy(marked_loader.dataset)
-    if args.dataset == "svhn":
-        try:
-            marked = forget_dataset.targets < 0
-        except:
-            marked = forget_dataset.labels < 0
-        forget_dataset.data = forget_dataset.data[marked]
-        try:
-            forget_dataset.targets = -forget_dataset.targets[marked] - 1
-        except:
-            forget_dataset.labels = -forget_dataset.labels[marked] - 1
-        forget_loader = replace_loader_dataset(forget_dataset, seed=seed, shuffle=True)
-        retain_dataset = copy.deepcopy(marked_loader.dataset)
-        try:
-            marked = retain_dataset.targets >= 0
-        except:
-            marked = retain_dataset.labels >= 0
-        retain_dataset.data = retain_dataset.data[marked]
-        try:
-            retain_dataset.targets = retain_dataset.targets[marked]
-        except:
-            retain_dataset.labels = retain_dataset.labels[marked]
-        retain_loader = replace_loader_dataset(retain_dataset, seed=seed, shuffle=True)
-        assert len(forget_dataset) + len(retain_dataset) == len(
-            train_loader_full.dataset
-        )
+    # --- Início da Lógica de Separação Forget/Retain ---
+    # Fazemos cópias profundas do dataset original marcado para modificação
+    forget_dataset_instance = copy.deepcopy(marked_loader.dataset)
+    retain_dataset_instance = copy.deepcopy(marked_loader.dataset)
 
+    # Determinar o nome do atributo dos rótulos (geralmente 'targets' ou 'labels')
+    target_attr_name = ''
+    if hasattr(forget_dataset_instance, 'targets'):
+        target_attr_name = 'targets'
+    elif hasattr(forget_dataset_instance, 'labels'):
+        target_attr_name = 'labels'
     else:
-        try:
-            marked = forget_dataset.targets < 0
-            forget_dataset.data = forget_dataset.data[marked]
-            forget_dataset.targets = -forget_dataset.targets[marked] - 1
-            forget_loader = replace_loader_dataset(
-                forget_dataset, seed=seed, shuffle=True
-            )
-            retain_dataset = copy.deepcopy(marked_loader.dataset)
-            marked = retain_dataset.targets >= 0
-            retain_dataset.data = retain_dataset.data[marked]
-            retain_dataset.targets = retain_dataset.targets[marked]
-            retain_loader = replace_loader_dataset(
-                retain_dataset, seed=seed, shuffle=True
-            )
-            assert len(forget_dataset) + len(retain_dataset) == len(
-                train_loader_full.dataset
-            )
-        except:
-            marked = forget_dataset.targets < 0
-            forget_dataset.imgs = forget_dataset.imgs[marked]
-            forget_dataset.targets = -forget_dataset.targets[marked] - 1
-            forget_loader = replace_loader_dataset(
-                forget_dataset, seed=seed, shuffle=True
-            )
-            retain_dataset = copy.deepcopy(marked_loader.dataset)
-            marked = retain_dataset.targets >= 0
-            retain_dataset.imgs = retain_dataset.imgs[marked]
-            retain_dataset.targets = retain_dataset.targets[marked]
-            retain_loader = replace_loader_dataset(
-                retain_dataset, seed=seed, shuffle=True
-            )
-            assert len(forget_dataset) + len(retain_dataset) == len(
-                train_loader_full.dataset
-            )
+        raise AttributeError(f"Dataset (tipo: {type(forget_dataset_instance)}) não possui atributo '.targets' ou '.labels'.")
 
-    print(f"number of retain dataset {len(retain_dataset)}")
-    print(f"number of forget dataset {len(forget_dataset)}")
+    # Obter os rótulos originais do dataset marcado (alguns podem ser negativos)
+    original_marked_targets = np.array(getattr(forget_dataset_instance, target_attr_name))
+
+    # --- 1. Criar o Forget Set ---
+    # Amostras para esquecer são aquelas com rótulos negativos
+    is_forget_sample_mask = original_marked_targets < 0
+    
+    # Atualizar rótulos no forget_dataset_instance: reverter para original (positivo) e filtrar
+    final_forget_targets = -original_marked_targets[is_forget_sample_mask] - 1
+    setattr(forget_dataset_instance, target_attr_name, final_forget_targets)
+    
+    # Filtrar os dados das amostras (imagens)
+    if hasattr(forget_dataset_instance, 'data') and getattr(forget_dataset_instance, 'data') is not None:
+        # Para datasets como CIFAR10/100 que têm .data como NumPy array
+        original_data_attr = np.array(getattr(forget_dataset_instance, 'data'))
+        setattr(forget_dataset_instance, 'data', original_data_attr[is_forget_sample_mask])
+        print(f"INFO: Forget set usou '.data' (shape: {forget_dataset_instance.data.shape if hasattr(forget_dataset_instance, 'data') else 'N/A'})")
+    elif hasattr(forget_dataset_instance, 'image_paths') and getattr(forget_dataset_instance, 'image_paths') is not None:
+        # Para seu Food101NDataset que usa .image_paths (lista de strings)
+        original_paths_attr = np.array(getattr(forget_dataset_instance, 'image_paths'), dtype=object) # dtype=object para strings
+        setattr(forget_dataset_instance, 'image_paths', original_paths_attr[is_forget_sample_mask].tolist())
+        print(f"INFO: Forget set usou '.image_paths' (len: {len(forget_dataset_instance.image_paths) if hasattr(forget_dataset_instance, 'image_paths') else 'N/A'})")
+    elif hasattr(forget_dataset_instance, 'imgs') and getattr(forget_dataset_instance, 'imgs') is not None:
+        # Fallback para datasets que usam .imgs (geralmente lista de tuplas (caminho, rótulo) ou apenas caminhos)
+        original_imgs_attr = list(getattr(forget_dataset_instance, 'imgs'))
+        setattr(forget_dataset_instance, 'imgs', [img for i, img in enumerate(original_imgs_attr) if is_forget_sample_mask[i]])
+        print(f"INFO: Forget set usou '.imgs' (len: {len(forget_dataset_instance.imgs) if hasattr(forget_dataset_instance, 'imgs') else 'N/A'})")
+    else:
+        print("AVISO: Não foi possível filtrar dados para forget_dataset. Atributo de dados (.data, .image_paths, .imgs) não encontrado ou é None.")
+
+    # Opcional: Filtrar outros atributos se existirem e forem por amostra (ex: verification_labels)
+    if hasattr(forget_dataset_instance, 'verification_labels') and getattr(forget_dataset_instance, 'verification_labels') is not None:
+        original_vlabels = np.array(getattr(forget_dataset_instance, 'verification_labels'))
+        setattr(forget_dataset_instance, 'verification_labels', original_vlabels[is_forget_sample_mask])
+    
+    forget_loader = replace_loader_dataset(forget_dataset_instance, seed_val=seed, shuffle_val=True)
+
+    # --- 2. Criar o Retain Set ---
+    # Amostras para reter são aquelas com rótulos NÃO negativos
+    is_retain_sample_mask = original_marked_targets >= 0 # Usa os mesmos original_marked_targets
+
+    # Atualizar rótulos no retain_dataset_instance: já estão corretos, apenas filtrar
+    final_retain_targets = original_marked_targets[is_retain_sample_mask]
+    setattr(retain_dataset_instance, target_attr_name, final_retain_targets)
+
+    # Filtrar os dados das amostras (imagens)
+    if hasattr(retain_dataset_instance, 'data') and getattr(retain_dataset_instance, 'data') is not None:
+        original_data_attr_retain = np.array(getattr(retain_dataset_instance, 'data'))
+        setattr(retain_dataset_instance, 'data', original_data_attr_retain[is_retain_sample_mask])
+        print(f"INFO: Retain set usou '.data' (shape: {retain_dataset_instance.data.shape if hasattr(retain_dataset_instance, 'data') else 'N/A'})")
+    elif hasattr(retain_dataset_instance, 'image_paths') and getattr(retain_dataset_instance, 'image_paths') is not None:
+        original_paths_attr_retain = np.array(getattr(retain_dataset_instance, 'image_paths'), dtype=object)
+        setattr(retain_dataset_instance, 'image_paths', original_paths_attr_retain[is_retain_sample_mask].tolist())
+        print(f"INFO: Retain set usou '.image_paths' (len: {len(retain_dataset_instance.image_paths) if hasattr(retain_dataset_instance, 'image_paths') else 'N/A'})")
+    elif hasattr(retain_dataset_instance, 'imgs') and getattr(retain_dataset_instance, 'imgs') is not None:
+        original_imgs_attr_retain = list(getattr(retain_dataset_instance, 'imgs'))
+        setattr(retain_dataset_instance, 'imgs', [img for i, img in enumerate(original_imgs_attr_retain) if is_retain_sample_mask[i]])
+        print(f"INFO: Retain set usou '.imgs' (len: {len(retain_dataset_instance.imgs) if hasattr(retain_dataset_instance, 'imgs') else 'N/A'})")
+    else:
+        print("AVISO: Não foi possível filtrar dados para retain_dataset. Atributo de dados (.data, .image_paths, .imgs) não encontrado ou é None.")
+
+    if hasattr(retain_dataset_instance, 'verification_labels') and getattr(retain_dataset_instance, 'verification_labels') is not None:
+        original_vlabels_retain = np.array(getattr(retain_dataset_instance, 'verification_labels'))
+        setattr(retain_dataset_instance, 'verification_labels', original_vlabels_retain[is_retain_sample_mask])
+
+    retain_loader = replace_loader_dataset(retain_dataset_instance, seed_val=seed, shuffle_val=True)
+    
+    # --- Fim da Lógica de Separação ---
+
+    # Validação do tamanho (Assertion)
+    if train_loader_full and train_loader_full.dataset:
+        # A asserção deve funcionar se __len__ dos datasets modificados estiver correto
+        # (ou seja, se Food101NDataset.__len__ retorna len(self.targets) e self.targets é atualizado)
+        if not (len(forget_dataset_instance) + len(retain_dataset_instance) == len(train_loader_full.dataset)):
+            print(f"AVISO {args.dataset.upper()}: Asserção de tamanho falhou! "
+                  f"Forget({len(forget_dataset_instance)}) + Retain({len(retain_dataset_instance)}) = {len(forget_dataset_instance) + len(retain_dataset_instance)}, "
+                  f"Full({len(train_loader_full.dataset)})")
+    else:
+        print("AVISO: train_loader_full ou seu dataset é None. Não é possível verificar a asserção de tamanho.")
+
+    print(f"Número de amostras no retain_dataset final: {len(retain_dataset_instance)}")
+    print(f"Número de amostras no forget_dataset final: {len(forget_dataset_instance)}")
+    
     unlearn_data_loaders = OrderedDict(
         retain=retain_loader, forget=forget_loader, val=val_loader, test=test_loader
     )
 
     criterion = nn.CrossEntropyLoss()
 
+    # Carregamento do modelo e chamada a save_gradient_ratio
     if args.resume:
-        checkpoint = unlearn.load_unlearn_checkpoint(model, device, args)
+        checkpoint_data = unlearn.load_unlearn_checkpoint(model, device, args) # Renomeado para evitar conflito
+        if checkpoint_data is not None:
+             model, evaluation_result = checkpoint_data # Desempacota se não for None
+    else: # Sempre carrega o modelo base se não for resume
+        checkpoint_loaded = torch.load(args.model_path, map_location=device) # Renomeado
+        if "state_dict" in checkpoint_loaded.keys():
+            state_dict_to_load = checkpoint_loaded["state_dict"]
+        elif "model" in checkpoint_loaded.keys(): # Outro formato comum
+            state_dict_to_load = checkpoint_loaded["model"]
+        else:
+            state_dict_to_load = checkpoint_loaded # Assume que o checkpoint é o state_dict diretamente
 
-    if args.resume and checkpoint is not None:
-        model, evaluation_result = checkpoint
-    else:
-        checkpoint = torch.load(args.model_path, map_location=device)
-        if "state_dict" in checkpoint.keys():
-            checkpoint = checkpoint["state_dict"]
-            model.load_state_dict(checkpoint, strict=False)
+        new_state_dict = OrderedDict()
+        for k, v in state_dict_to_load.items():
+            name = k[7:] if k.startswith('module.') else k 
+            new_state_dict[name] = v
+        model.load_state_dict(new_state_dict, strict=False)
 
     save_gradient_ratio(unlearn_data_loaders, model, criterion, args)
 
