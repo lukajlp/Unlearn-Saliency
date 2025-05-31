@@ -9,6 +9,7 @@ import torch.optim
 import torch.utils.data
 import unlearn
 import utils
+import pprint
 
 
 def save_gradient_ratio(data_loaders, model, criterion, args):
@@ -104,6 +105,44 @@ def main():
         marked_loader,
     ) = utils.setup_model_dataset(args)
     model.cuda()
+
+    # ----- INÍCIO DOS PRINTS DE DEPURAÇÃO PARA train_loader_full -----
+    print("\n--- [DEBUG generate_mask.py] Verificando train_loader_full ---")
+    print(f"Tipo de train_loader_full recebido de utils: {type(train_loader_full)}")
+
+    if train_loader_full is not None:
+        print("train_loader_full não é None.")
+        print("\nAtributos de 'train_loader_full' (via vars()):")
+        try:
+            pprint.pprint(vars(train_loader_full))
+        except TypeError:
+            print("Não foi possível usar vars(train_loader_full). Tentando dir():")
+            pprint.pprint(dir(train_loader_full))
+
+    # ----- INÍCIO DOS PRINTS DE DEPURAÇÃO PARA test_loader -----
+    print("\n--- [DEBUG generate_mask.py] Verificando test_loader ---")
+    print(f"Tipo de test_loader recebido de utils: {type(test_loader)}")
+    if test_loader is not None:
+        print("test_loader não é None.")
+        print("\nAtributos de 'test_loader' (via vars()):")
+        try:
+            pprint.pprint(vars(test_loader))
+        except TypeError:
+            print("Não foi possível usar vars(test_loader). Tentando dir():")
+            pprint.pprint(dir(test_loader))
+
+    # ----- INÍCIO DOS PRINTS DE DEPURAÇÃO GENÉRICOS -----
+    print("\n--- [DEBUG generate_mask.py] Verificando marked_loader ---")
+    print(f"Tipo de marked_loader recebido de utils: {type(marked_loader)}")
+    
+    if marked_loader is not None:
+        print("marked_loader não é None.")
+        print("\nAtributos de 'marked_loader' (via vars()):")
+        try:
+            pprint.pprint(vars(marked_loader))
+        except TypeError:
+            print("Não foi possível usar vars(marked_loader). Tentando dir():")
+            pprint.pprint(dir(marked_loader))
 
     def replace_loader_dataset(
         dataset, batch_size=args.batch_size, seed=1, shuffle=True
